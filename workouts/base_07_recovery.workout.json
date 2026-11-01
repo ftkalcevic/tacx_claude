@@ -1,0 +1,13 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 07 - Recovery Spin",
+  "description": "Any week. Very easy spinning for days when you're tired or a bit sore. Stop if anything aches.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "3:00", "ftp_pct": [40, 50], "cadence": [80, 90] },
+    { "name": "Recovery", "duration": "24:00", "ftp_pct": 50, "cadence": [85, 95],
+      "text": [ { "at": "0:00", "msg": "Barely working. This should feel too easy." } ] },
+    { "name": "Cool down", "duration": "3:00", "ftp_pct": [45, 40] }
+  ]
+}

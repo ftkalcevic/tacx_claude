@@ -1,0 +1,19 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 08 - Endurance Pyramid",
+  "description": "Weeks 5-6. 3-minute steps climbing from 60% to 75% FTP and back down. Gradual, with no sudden jumps.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "5:00", "ftp_pct": [40, 60], "cadence": [80, 90] },
+    { "name": "Step 60%", "duration": "3:00", "ftp_pct": 60, "cadence": [85, 95] },
+    { "name": "Step 65%", "duration": "3:00", "ftp_pct": 65, "cadence": [85, 95] },
+    { "name": "Step 70%", "duration": "3:00", "ftp_pct": 70, "cadence": [85, 95] },
+    { "name": "Top 75%", "duration": "3:00", "ftp_pct": 75, "cadence": [85, 95],
+      "text": [ { "at": "0:00", "msg": "Top of the pyramid. It's all downhill from here." } ] },
+    { "name": "Step 70%", "duration": "3:00", "ftp_pct": 70, "cadence": [85, 95] },
+    { "name": "Step 65%", "duration": "3:00", "ftp_pct": 65, "cadence": [85, 95] },
+    { "name": "Step 60%", "duration": "3:00", "ftp_pct": 60, "cadence": [85, 95] },
+    { "name": "Cool down", "duration": "4:00", "ftp_pct": [55, 40] }
+  ]
+}

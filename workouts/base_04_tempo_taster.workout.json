@@ -1,0 +1,17 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 04 - Tempo Taster",
+  "description": "Weeks 3-4. First touch of tempo: three 4-minute efforts at 75% FTP, with easy spinning between them.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "6:00", "ftp_pct": [40, 65], "cadence": [80, 90] },
+    { "repeat": 3, "name": "Tempo", "steps": [
+      { "name": "Tempo", "duration": "4:00", "ftp_pct": 75, "cadence": [85, 95],
+        "text": [ { "at": "0:00", "msg": "Comfortably hard: short sentences only" } ] },
+      { "name": "Easy", "duration": "2:00", "ftp_pct": 50 }
+    ] },
+    { "name": "Endurance", "duration": "3:00", "ftp_pct": 60, "cadence": [85, 95] },
+    { "name": "Cool down", "duration": "3:00", "ftp_pct": [55, 40] }
+  ]
+}

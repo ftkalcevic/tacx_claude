@@ -1,0 +1,20 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 06 - Rolling Road",
+  "description": "Weeks 4-6. Gentle slope-mode rollers of 0-2%. You choose the gears, as on a real road. Keep the cadence up and never grind.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "5:00", "free": true, "cadence": [80, 90],
+      "text": [ { "at": "0:00", "msg": "Slope mode: shift gears to keep cadence 85+ on every rise" } ] },
+    { "name": "Drag 1%", "duration": "4:00", "grade": 1.0, "cadence": [85, 95] },
+    { "name": "Flat", "duration": "2:00", "grade": 0.0 },
+    { "name": "Rise 2%", "duration": "3:00", "grade": 2.0, "cadence": [80, 90],
+      "text": [ { "at": "0:00", "msg": "Shift down early, stay seated, spin it" } ] },
+    { "name": "False flat", "duration": "3:00", "grade": 0.5 },
+    { "name": "Drag 1.5%", "duration": "4:00", "grade": 1.5, "cadence": [85, 95] },
+    { "name": "Flat", "duration": "2:00", "grade": 0.0 },
+    { "name": "Rise 2%", "duration": "3:00", "grade": 2.0, "cadence": [80, 90] },
+    { "name": "Cool down", "duration": "4:00", "ftp_pct": [50, 40] }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "VO2 5x3",
+  "description": "Five 3-minute VO2 max efforts with 2-minute recoveries.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "10:00", "ftp_pct": [50, 75], "cadence": [85, 95],
+      "text": [ { "at": "0:00", "msg": "Easy spin to start" },
+                { "at": "9:30", "msg": "Intervals in 30 s" } ] },
+
+    { "repeat": 5, "name": "VO2", "steps": [
+      { "name": "On",  "duration": "3:00", "ftp_pct": 110, "cadence": [95, 105] },
+      { "name": "Off", "duration": "2:00", "ftp_pct": 55 }
+    ] },
+
+    { "name": "Hill", "duration": "4:00", "grade": 4.0 },
+    { "name": "Spin out", "duration": 120, "free": true },
+    { "name": "Cool down", "duration": "8:00", "ftp_pct": [65, 45] }
+  ]
+}

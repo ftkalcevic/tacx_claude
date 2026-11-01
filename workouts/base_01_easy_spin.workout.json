@@ -1,0 +1,15 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 01 - Easy Spin",
+  "description": "Weeks 1-2. 20 minutes of easy, steady pedalling. Getting the legs and body used to the bike again.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "5:00", "ftp_pct": [40, 55], "cadence": [80, 90],
+      "text": [ { "at": "0:00", "msg": "Easy gear, relaxed shoulders. Stop whenever anything hurts." } ] },
+    { "name": "Easy steady", "duration": "20:00", "ftp_pct": 55, "cadence": [85, 95],
+      "text": [ { "at": "0:30", "msg": "You should be able to talk in full sentences" },
+                { "at": "10:00", "msg": "Halfway. Knees and back OK? Saddle comfortable?" } ] },
+    { "name": "Cool down", "duration": "5:00", "ftp_pct": [50, 40], "cadence": [80, 90] }
+  ]
+}

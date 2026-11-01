@@ -1,0 +1,18 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Test - all modes",
+  "description": "Short steps to check every target type and the Next button. About 4 minutes.",
+  "steps": [
+    { "name": "Ramp",       "duration": 40, "ftp_pct": [40, 80],
+      "text": [ { "at": 0, "msg": "Ramp from 40% to 80% FTP" } ] },
+    { "name": "Fixed watts", "duration": 30, "watts": 120 },
+    { "name": "Short", "repeat": 2, "steps": [
+      { "name": "Hard", "duration": 20, "ftp_pct": 100, "cadence": 95 },
+      { "name": "Easy", "duration": 20, "ftp_pct": 50 }
+    ] },
+    { "name": "Climb",      "duration": 30, "grade": 5.0 },
+    { "name": "Resistance", "duration": 30, "resistance": 20 },
+    { "name": "Free",       "duration": 30, "free": true }
+  ]
+}

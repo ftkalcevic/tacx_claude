@@ -1,0 +1,18 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 03 - Cadence Skills",
+  "description": "Weeks 2-6. Low power and changing cadence, for smooth, efficient pedalling. A smooth spin takes load off the knees.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "5:00", "ftp_pct": [40, 55], "cadence": [80, 90] },
+    { "repeat": 4, "name": "Cadence ladder", "steps": [
+      { "name": "Steady 80", "duration": "2:00", "ftp_pct": 55, "cadence": [78, 85] },
+      { "name": "Quicker 90", "duration": "2:00", "ftp_pct": 55, "cadence": [88, 95],
+        "text": [ { "at": "0:00", "msg": "Lift the cadence, keep the upper body still" } ] },
+      { "name": "Fast 100", "duration": "1:00", "ftp_pct": 55, "cadence": [98, 105],
+        "text": [ { "at": "0:00", "msg": "Smooth circles, no bouncing on the saddle" } ] }
+    ] },
+    { "name": "Cool down", "duration": "5:00", "ftp_pct": [50, 40], "cadence": [80, 90] }
+  ]
+}

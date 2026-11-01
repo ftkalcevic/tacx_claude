@@ -1,0 +1,20 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Sweet Spot 2x20",
+  "description": "Two 20-minute sweet spot blocks at 88-90% FTP.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "12:00", "ftp_pct": [45, 70] },
+    { "name": "Openers", "repeat": 3, "steps": [
+      { "name": "Spin up", "duration": 30, "ftp_pct": 100, "cadence": [100, 110] },
+      { "name": "Easy",    "duration": 60, "ftp_pct": 55 }
+    ] },
+    { "name": "Sweet spot 1", "duration": "20:00", "ftp_pct": 88, "cadence": [85, 95],
+      "text": [ { "at": "10:00", "msg": "Halfway - stay smooth" } ] },
+    { "name": "Recovery", "duration": "5:00", "ftp_pct": 50 },
+    { "name": "Sweet spot 2", "duration": "20:00", "ftp_pct": 90, "cadence": [85, 95],
+      "text": [ { "at": "18:00", "msg": "Two minutes to go" } ] },
+    { "name": "Cool down", "duration": "8:00", "ftp_pct": [60, 40] }
+  ]
+}

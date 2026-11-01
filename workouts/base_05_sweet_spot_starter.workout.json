@@ -1,0 +1,18 @@
+{
+  "format": "tacx-workout",
+  "version": 1,
+  "name": "Base 05 - Sweet Spot Starter",
+  "description": "Weeks 5-6. Two 7-minute blocks at 85% FTP. Only once the tempo sessions feel easy and pain-free.",
+  "author": "Frank",
+  "steps": [
+    { "name": "Warm up", "duration": "6:00", "ftp_pct": [40, 70], "cadence": [80, 90],
+      "text": [ { "at": "5:30", "msg": "First block in 30 s" } ] },
+    { "repeat": 2, "name": "Sweet spot", "steps": [
+      { "name": "Sweet spot", "duration": "7:00", "ftp_pct": 85, "cadence": [85, 95],
+        "text": [ { "at": "0:00", "msg": "Steady and controlled. Lower the FTP % if it's too much." },
+                  { "at": "6:00", "msg": "One minute to go" } ] },
+      { "name": "Recover", "duration": "3:00", "ftp_pct": 50 }
+    ] },
+    { "name": "Cool down", "duration": "4:00", "ftp_pct": [55, 40] }
+  ]
+}
