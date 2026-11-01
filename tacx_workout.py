@@ -474,7 +474,8 @@ class WorkoutPlayer:
         self.finished = False
         self.message: Optional[str] = None
         self.message_time = 0.0
-        self.trace: list = []           # (timeline seconds, actual watts)
+        self.trace: list = []           # (timeline s, watts, cadence, heart rate), once a second
+        self._trace_pos = -1e9
         self._last_tick: Optional[float] = None
         self._last_pedal: Optional[float] = None
         self._sent = None
@@ -566,7 +567,10 @@ class WorkoutPlayer:
             self.index = len(self.workout.steps) - 1
             self.message, self.message_time = "Workout complete!", time.time()
 
-    def tick(self, now: float, cadence: Optional[float], power: Optional[float] = None):
+    TRACE_S = 1.0  # trace resolution along the workout timeline
+
+    def tick(self, now: float, cadence: Optional[float], power: Optional[float] = None,
+             hr: Optional[float] = None):
         with self._lock:
             dt = 0.0 if self._last_tick is None else min(max(now - self._last_tick, 0.0), 2.0)
             self._last_tick = now
@@ -592,8 +596,10 @@ class WorkoutPlayer:
                     self._change_step()
                     if not self.finished:
                         self.step_elapsed = over
-                if power is not None and not self.finished:
-                    self.trace.append((self.position, power))
+                pos = self.position
+                if not self.finished and pos - self._trace_pos >= self.TRACE_S                         and (power, cadence, hr) != (None, None, None):
+                    self.trace.append((pos, power, cadence, hr or None))
+                    self._trace_pos = pos
             s = self.step
             if s is not None and self.started:  # not before the rider starts pedalling
                 for j, (at, msg) in enumerate(s.texts):
@@ -624,6 +630,11 @@ class WorkoutPlayer:
         self._sent, self._sent_index, self._sent_time = cmd, self.index, now
         return cmd
 
+    def trace_since(self, start: int) -> list:
+        """Trace points from index `start` on, so a display only copies what's new."""
+        with self._lock:
+            return self.trace[start:]
+
     def snapshot(self) -> dict:
         """Everything a display needs, read consistently."""
         with self._lock:
@@ -641,17 +652,17 @@ class WorkoutPlayer:
                 "finished": self.finished, "ftp": self.ftp, "base_ftp": self.base_ftp,
                 "intensity": self.intensity_pct, "message": self.message,
                 "message_age": time.time() - self.message_time,
-                "trace": list(self.trace),
+                "trace_len": len(self.trace),
             }
 
 
 def rider_inputs(state) -> tuple:
-    """(cadence, power) from a TrainerState, or (None, None) when it's stale."""
+    """(cadence, power, heart rate) from a TrainerState, all None when it's stale."""
     if state is None or time.time() - state.timestamp >= 3:
-        return None, None
+        return None, None, None
     cad = state.cadence_rpm if state.cadence_rpm is not None else state.crank_cadence_rpm
     power = state.power_w if state.power_w is not None else state.cps_power_w
-    return cad, power
+    return cad, power, state.heart_rate_bpm
 
 
 async def send_command(neo, cmd) -> None:
@@ -667,8 +678,7 @@ async def send_command(neo, cmd) -> None:
 async def drive(player: WorkoutPlayer, neo, stop: asyncio.Event, period: float = 0.1) -> None:
     """Run the player against a connected TacxNeo until `stop` is set."""
     while not stop.is_set():
-        cad, power = rider_inputs(neo.state)
-        cmd = player.tick(time.time(), cad, power)
+        cmd = player.tick(time.time(), *rider_inputs(neo.state))
         if cmd:
             try:
                 await send_command(neo, cmd)

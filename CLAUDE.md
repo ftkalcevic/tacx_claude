@@ -28,7 +28,7 @@ Keep workouts short (about 30 min) and conservative, with cadence at 85–95 rpm
 | `user.json`, `users/*.json` | Rider profiles (format `tacx-user`). |
 | `workouts/*.workout.json` | Workouts (format `tacx-workout`). `workouts/README.md` is the 6-week plan. |
 | `schemas/*.schema.json` | JSON Schemas for both formats, used by VS Code IntelliSense and mapped in `.vscode/settings.json`. |
-| `.cache/` | Thumbnails (`thumbnails/<sha1>.png`) and `launcher.json` state. Not source; don't commit it. |
+| `.cache/` | Thumbnails (`thumbnails/<sha1>.png`), `launcher.json` state, and `dashboard.json` (which lines the workout chart shows). Not source; don't commit it. |
 
 Dependencies are in `requirements.txt` and installed in `.venv` (Python 3.14 on the
 dev machine). Run everything with `.venv\Scripts\python`.

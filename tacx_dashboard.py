@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import json
 import math
+import os
 import struct
 import threading
 import time
@@ -485,8 +487,31 @@ def zone_colour(watts: Optional[float], ftp: Optional[float]) -> str:
     return next(c for top, c in ZONES if pct < top)
 
 
+TRACES = {  # workout chart overlays: key -> (label, colour, trace column, axis)
+    "power": ("Power", "#ffffff", 1, "left"),
+    "hr": ("Heart rate", COL_HR, 3, "right"),
+    "cadence": ("Cadence", COL_CADENCE, 2, "right"),
+}
+PREFS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache", "dashboard.json")
+
+
+def load_prefs() -> dict:
+    try:
+        with open(PREFS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_prefs(prefs: dict) -> None:
+    os.makedirs(os.path.dirname(PREFS_FILE), exist_ok=True)
+    with open(PREFS_FILE, "w", encoding="utf-8") as f:
+        json.dump(prefs, f, indent=2)
+
+
 class WorkoutProfile(pg.PlotWidget):
-    """The whole workout as coloured blocks, with progress and actual power on top."""
+    """The whole workout as coloured blocks, with progress and the rider's actual power,
+    heart rate and cadence on top (heart rate and cadence on a right-hand axis)."""
 
     def __init__(self, player: tw.WorkoutPlayer):
         super().__init__()
@@ -504,12 +529,49 @@ class WorkoutProfile(pg.PlotWidget):
         self.done = pg.LinearRegionItem((0, 0), movable=False, brush=(0, 0, 0, 110), pen=pg.mkPen(None))
         self.done.setZValue(10)
         self.addItem(self.done)
-        self.trace = pg.PlotDataItem(pen=pg.mkPen((255, 255, 255, 170), width=1.5))
-        self.trace.setZValue(20)
-        self.addItem(self.trace)
         self.marker = pg.InfiniteLine(0, angle=90, pen=pg.mkPen("#ffffff", width=2))
         self.marker.setZValue(30)
         self.addItem(self.marker)
+
+        # heart rate and cadence share a second view box with its own right-hand axis
+        pi = self.getPlotItem()
+        self.right_vb = pg.ViewBox(enableMouse=False)
+        self.right_vb.setZValue(25)
+        pi.showAxis("right")
+        pi.scene().addItem(self.right_vb)
+        pi.getAxis("right").linkToView(self.right_vb)
+        pi.getAxis("right").setLabel("bpm · rpm")
+        self.right_vb.setXLink(pi)
+        pi.vb.sigResized.connect(lambda: self.right_vb.setGeometry(pi.vb.sceneBoundingRect()))
+        self.curves = {}
+        for key, (_label, colour, _col, axis) in TRACES.items():
+            c = QtGui.QColor(colour)
+            c.setAlpha(200)
+            curve = pg.PlotDataItem(pen=pg.mkPen(c, width=1.6), connect="finite")
+            curve.setZValue(20)
+            (self.right_vb if axis == "right" else pi.vb).addItem(curve)
+            self.curves[key] = curve
+        self._data = []  # trace points copied from the player so far
+        self.set_visible({"power": True, "hr": False, "cadence": False})
+
+    def set_visible(self, shown: dict) -> None:
+        for key, curve in self.curves.items():
+            curve.setVisible(bool(shown.get(key)))
+        right = any(shown.get(k) for k, v in TRACES.items() if v[3] == "right")
+        self.getPlotItem().getAxis("right").setVisible(right)
+        self._fit_right()
+
+    def _fit_right(self) -> None:
+        """Right axis range: covers the visible heart rate / cadence lines, at least 40-180."""
+        lo, hi = 40.0, 180.0
+        if self._data:
+            a = np.asarray(self._data, dtype=float)
+            for key, (_l, _c, col, axis) in TRACES.items():
+                if axis == "right" and self.curves[key].isVisible():
+                    vals = a[:, col][np.isfinite(a[:, col])]
+                    if len(vals):
+                        lo, hi = min(lo, vals.min() - 5), max(hi, vals.max() + 5)
+        self.right_vb.setYRange(lo, hi, padding=0)
 
     def _draw_blocks(self, ftp: Optional[float]) -> None:
         for b in self._blocks:
@@ -541,9 +603,12 @@ class WorkoutProfile(pg.PlotWidget):
         pos = snap["position"] / 60
         self.marker.setValue(pos)
         self.done.setRegion((0, pos))
-        if snap["trace"]:
-            t = np.asarray(snap["trace"], dtype=float)
-            self.trace.setData(t[:, 0] / 60, t[:, 1])
+        if snap["trace_len"] > len(self._data):  # new points: about once a second
+            self._data += self.player.trace_since(len(self._data))
+            a = np.asarray(self._data, dtype=float)  # None -> nan: gaps in the lines
+            for key, (_l, _c, col, _axis) in TRACES.items():
+                self.curves[key].setData(a[:, 0] / 60, a[:, col])
+            self._fit_right()
 
 
 class WorkoutPanel(QtWidgets.QFrame):
@@ -561,7 +626,24 @@ class WorkoutPanel(QtWidgets.QFrame):
         # the text column sets the panel height; the chart just fills it
         self.profile.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
         self.profile.setMinimumHeight(200)
-        lay.addWidget(self.profile, 3)
+        # which actual-ride lines to draw over the workout: remembered between rides
+        self.prefs = load_prefs()
+        shown = {"power": True, "hr": False, "cadence": False, **self.prefs.get("workout_traces", {})}
+        toggles = QtWidgets.QHBoxLayout()
+        toggles.addWidget(QtWidgets.QLabel("Show:"))
+        for key, (label, colour, _col, _axis) in TRACES.items():
+            cb = QtWidgets.QCheckBox(label)
+            cb.setChecked(shown[key])
+            cb.setStyleSheet(f"QCheckBox {{ color:{colour}; font-weight:600; }}")
+            cb.toggled.connect(lambda on, k=key: self._toggle_trace(k, on))
+            toggles.addWidget(cb)
+        toggles.addStretch()
+        self.shown = shown
+        self.profile.set_visible(shown)
+        chart_col = QtWidgets.QVBoxLayout()
+        chart_col.addWidget(self.profile, 1)
+        chart_col.addLayout(toggles)
+        lay.addLayout(chart_col, 3)
 
         info = QtWidgets.QVBoxLayout()
         info.setSpacing(2)
@@ -644,6 +726,12 @@ class WorkoutPanel(QtWidgets.QFrame):
         info.addLayout(prog)
         info.addSpacing(6)
         info.addLayout(controls)
+
+    def _toggle_trace(self, key: str, on: bool) -> None:
+        self.shown[key] = on
+        self.profile.set_visible(self.shown)
+        self.prefs["workout_traces"] = dict(self.shown)
+        save_prefs(self.prefs)
 
     def update_view(self, snap: dict, cadence: Optional[float]) -> None:
         self.profile.update_view(snap)
