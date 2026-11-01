@@ -447,6 +447,9 @@ class WorkoutPlayer:
     """
 
     AUTOPAUSE_S = 3.0
+    # After the last step: basic resistance mode, a plain brake. Slope mode at 0% isn't
+    # suitable: the NEO simulates the bike's momentum and keeps the flywheel spinning.
+    FINISH_RESISTANCE_PCT = 10
     COUNTDOWN_S = 5
 
     def __init__(self, workout: Workout, ftp: Optional[float], autopause: bool = True):
@@ -613,7 +616,7 @@ class WorkoutPlayer:
     def _command(self, now: float):
         s = self.step
         if s is None:
-            cmd = ("grade", 0.0)            # workout over: back to a flat road
+            cmd = ("resistance", self.FINISH_RESISTANCE_PCT)  # workout over: light brake
         elif s.is_erg:
             cmd = ("erg", int(round(s.watts_at(self.step_elapsed, self.ftp))))
         elif s.kind in ("grade", "resistance"):

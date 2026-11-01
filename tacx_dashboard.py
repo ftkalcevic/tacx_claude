@@ -214,6 +214,9 @@ class Tile(QtWidgets.QFrame):
     def __init__(self, caption: str, unit: str, color: str):
         super().__init__()
         self.setObjectName("tile")
+        # Width is shared equally by the row and height is fixed, whatever the text says:
+        # sizing from the text made the tiles shift as numbers changed width.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(16, 10, 16, 10)
         lay.setSpacing(0)
@@ -228,7 +231,7 @@ class Tile(QtWidgets.QFrame):
         row.addWidget(self.value)
         row.addWidget(self.unit)
         row.addStretch()
-        self.sub = QtWidgets.QLabel("")
+        self.sub = QtWidgets.QLabel(" ")  # a space, not "": keeps its line's height
         self.sub.setStyleSheet(f"color:{COL_TEXT}; font-size:10pt;")
         lay.addWidget(self.caption)
         lay.addLayout(row)
@@ -236,7 +239,7 @@ class Tile(QtWidgets.QFrame):
 
     def set(self, text: str, sub: str = "") -> None:
         self.value.setText(text)
-        self.sub.setText(sub)
+        self.sub.setText(sub or " ")
 
 
 class BalanceTile(QtWidgets.QFrame):
@@ -245,6 +248,9 @@ class BalanceTile(QtWidgets.QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("tile")
+        # Width is shared equally by the row and height is fixed, whatever the text says:
+        # sizing from the text made the tiles shift as numbers changed width.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(16, 10, 16, 10)
         cap = QtWidgets.QLabel("PEDAL BALANCE")
@@ -265,7 +271,7 @@ class BalanceTile(QtWidgets.QFrame):
         self.bar.setStyleSheet(
             f"QProgressBar {{ background:{COL_RIGHT}; border:none; border-radius:6px; }}"
             f"QProgressBar::chunk {{ background:{COL_LEFT}; border-radius:6px; }}")
-        self.watts = QtWidgets.QLabel("")
+        self.watts = QtWidgets.QLabel(" ")
         self.watts.setStyleSheet(f"color:{COL_TEXT}; font-size:10pt;")
         lay.addWidget(cap)
         lay.addLayout(row)
@@ -277,12 +283,12 @@ class BalanceTile(QtWidgets.QFrame):
             self.left.setText("L --")
             self.right.setText("-- R")
             self.bar.setValue(500)
-            self.watts.setText("")
+            self.watts.setText(" ")
             return
         self.left.setText(f"L {left_pct:.0f}%")
         self.right.setText(f"{100 - left_pct:.0f}% R")
         self.bar.setValue(int(left_pct * 10))
-        self.watts.setText("" if lw is None else f"{lw:.0f} W  /  {rw:.0f} W")
+        self.watts.setText(" " if lw is None else f"{lw:.0f} W  /  {rw:.0f} W")
 
 
 class Peanut(pg.PlotWidget):
@@ -315,13 +321,24 @@ class Peanut(pg.PlotWidget):
         self.left_lobe = path_item(COL_LEFT)
         self.latest = pg.PlotDataItem(pen=pg.mkPen((255, 255, 255, 110), width=1))
         self.addItem(self.latest)
+        # Text is pinned to the corners of the plot in pixels (parented to the view box,
+        # not placed on the chart's scale), so it can't drift into the rings and angle
+        # labels when the panel gets short: LEFT top-left, RIGHT top-right, info bottom-left.
+        vb = self.getPlotItem().vb
         self.left_txt = pg.TextItem("", color=COL_LEFT, anchor=(0, 0))
         self.right_txt = pg.TextItem("", color=COL_RIGHT, anchor=(1, 0))
-        self.info_txt = pg.TextItem("", color=COL_TEXT, anchor=(0.5, 0))
+        self.info_txt = pg.TextItem("", color=COL_TEXT, anchor=(0, 1))
         for t in (self.left_txt, self.right_txt, self.info_txt):
             t.setFont(QtGui.QFont("Segoe UI", 11))
-            self.addItem(t)
+            t.setParentItem(vb)
+        vb.sigResized.connect(self._place_text)
         self._set_scale(10)
+
+    def _place_text(self, *_) -> None:
+        r = self.getPlotItem().vb.boundingRect()
+        self.left_txt.setPos(r.left() + 4, r.top() + 2)
+        self.right_txt.setPos(r.right() - 4, r.top() + 2)
+        self.info_txt.setPos(r.left() + 4, r.bottom() - 2)
 
     @staticmethod
     def _xy(theta_deg, r):
@@ -358,9 +375,6 @@ class Peanut(pg.PlotWidget):
             self._grid_items += [line, lbl]
         m = R * 1.35
         self.setRange(xRange=(-m, m), yRange=(-m * 0.95, m * 0.95), padding=0)
-        self.left_txt.setPos(-m, m * 0.93)   # top corners: left leg left, right leg right
-        self.right_txt.setPos(m, m * 0.93)
-        self.info_txt.setPos(0, -R * 1.12)
 
     def _lobe_path(self, theta, r) -> QtGui.QPainterPath:
         xs, ys = self._xy(theta, r)
@@ -403,8 +417,9 @@ class Peanut(pg.PlotWidget):
         lp = sum(rv.left_pct for rv in revs) / len(revs)
         self.left_txt.setText(f"LEFT {lp:.0f}%\npeak {last.left_peak_nm:.1f} Nm @ {last.left_peak_deg}°")
         self.right_txt.setText(f"RIGHT {100 - lp:.0f}%\npeak {last.right_peak_nm:.1f} Nm @ {last.right_peak_deg}°")
-        self.info_txt.setText(f"{last.rpm:.0f} rpm  ·  avg torque {last.avg_torque_nm:.1f} Nm  ·  "
-                              f"last {len(revs)} revs")
+        # two short lines: one long line reaches the BDC label in a small panel
+        self.info_txt.setText(f"{last.rpm:.0f} rpm  ·  last {len(revs)} revs\n"
+                              f"avg torque {last.avg_torque_nm:.1f} Nm")
 
     def reset(self) -> None:
         # not clear(): PlotWidget binds clear() to PlotItem.clear on the instance
@@ -433,13 +448,18 @@ class History(pg.GraphicsLayoutWidget):
         last = len(self.SERIES) - 1
         for i, (key, name, unit, color) in enumerate(self.SERIES):
             p = self.addPlot(row=i, col=0)
-            p.setLabel("left", name, units=unit, color=color)
+            # a horizontal caption in the top-left corner instead of a rotated axis title:
+            # rotated titles are taller than the plots when the window is short, and collide
+            caption = pg.TextItem(f"{name} ({unit})", color=color, anchor=(0, 0), fill=(22, 27, 34, 190))
+            caption.setFont(QtGui.QFont("Segoe UI", 9))
+            caption.setParentItem(p.vb)
+            caption.setPos(4, 2)
             p.showGrid(x=True, y=True, alpha=0.15)
             p.setXRange(-HISTORY_S, 0, padding=0)
             p.setMouseEnabled(False, False)
             p.setMenuEnabled(False)
             p.hideButtons()
-            p.getAxis("left").setWidth(60)
+            p.getAxis("left").setWidth(40)
             if prev is not None:
                 p.setXLink(prev)
             if i < last:
@@ -780,7 +800,7 @@ class WorkoutPanel(QtWidgets.QFrame):
             self.remaining.setText("0:00")
             self.target.setText("")
             self.target_base.setText(" ")  # keep the line, so the layout doesn't jump
-            self.detail.setText("Trainer set to a flat road.")
+            self.detail.setText(f"Trainer set to a light resistance ({tw.WorkoutPlayer.FINISH_RESISTANCE_PCT}%).")
             self.next.setText("")
             self.next_btn.setEnabled(False)
             return
@@ -890,7 +910,12 @@ class Dashboard(QtWidgets.QMainWindow):
         self.workout = WorkoutPanel(shared.player, shared.user) if shared.player else None
 
         tiles = QtWidgets.QHBoxLayout()
-        for t in (self.power, self.cadence, self.speed, self.hr, self.balance):
+        row = (self.power, self.cadence, self.speed, self.hr, self.balance)
+        for t in row:
+            t.ensurePolished()  # apply the stylesheet fonts before measuring
+        tile_h = max(t.sizeHint().height() for t in row)
+        for t in row:
+            t.setFixedHeight(tile_h)  # one height for the whole row
             tiles.addWidget(t, 1)
         body = QtWidgets.QHBoxLayout()
         body.addWidget(self._panel("Pedal stroke", self.peanut), 5)

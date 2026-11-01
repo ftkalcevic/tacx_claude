@@ -161,7 +161,10 @@ How the player behaves:
 - **FTP spinner:** sets FTP as a percentage, 50–150% in 1% steps, default 100%. All
   `ftp_pct` targets change at once. The base FTP from the user file and the adjusted
   FTP are shown beside it. `watts` steps aren't affected.
-- **Finishing:** at the end of the workout the trainer is set to a flat road (0% slope).
+- **Finishing:** at the end of the workout the trainer switches to basic resistance mode
+  at a light 10% load, a plain brake. A 0% slope isn't used here: slope mode simulates
+  the bike's momentum, so the NEO would keep the flywheel spinning on its own after you
+  stop.
 
 ## Running a workout
 
