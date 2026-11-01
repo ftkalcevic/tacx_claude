@@ -1173,6 +1173,9 @@ def main() -> None:
         p.add_argument("--hrm", action="store_true", help="connect a Bluetooth heart rate strap (first found)")
         p.add_argument("--hrm-address", metavar="ADDR", help="heart rate strap BLE address (implies --hrm)")
 
+    p = sub.add_parser("launcher", help="choose a rider and a workout, then ride or edit it")
+    p.add_argument("--screenshot", metavar="PNG", help=argparse.SUPPRESS)
+
     p = sub.add_parser("editor", help="visual workout editor")
     p.add_argument("file", nargs="?", help=".workout.json or .zwo to open (default: a new workout)")
     user_args(p)
@@ -1224,6 +1227,10 @@ def main() -> None:
     if args.cmd == "dashboard":  # Qt owns the main thread; Bluetooth runs in a worker
         from tacx_dashboard import run
         run(args)
+        return
+    if args.cmd == "launcher":
+        from tacx_launcher import run as run_launcher
+        run_launcher(args)
         return
     if args.cmd == "editor":
         from tacx_editor import run as run_editor

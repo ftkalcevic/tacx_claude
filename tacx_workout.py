@@ -142,7 +142,12 @@ def load_user(path: Optional[str] = None) -> Optional[UserProfile]:
             d = json.load(f)
     except json.JSONDecodeError as e:
         raise WorkoutError(f"{path}: not valid JSON ({e})")
-    w = os.path.basename(path)
+    return parse_user(d, path)
+
+
+def parse_user(d, path: str = "") -> UserProfile:
+    """Validate a user document (already read from JSON) and build the profile."""
+    w = os.path.basename(path) or "user"
     if not isinstance(d, dict) or d.get("format") != "tacx-user":
         raise WorkoutError(f'{w}: "format" must be "tacx-user"')
     if d.get("version") != 1:
