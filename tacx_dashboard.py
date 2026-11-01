@@ -551,10 +551,14 @@ class WorkoutPanel(QtWidgets.QFrame):
         super().__init__()
         self.player = player
         self.setObjectName("tile")
-        self.setFixedHeight(290)
+        # height follows the contents (font sizes differ between screens), never squeezing them
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(10, 8, 14, 10)
         self.profile = WorkoutProfile(player)
+        # the text column sets the panel height; the chart just fills it
+        self.profile.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
+        self.profile.setMinimumHeight(200)
         lay.addWidget(self.profile, 3)
 
         info = QtWidgets.QVBoxLayout()
@@ -575,9 +579,15 @@ class WorkoutPanel(QtWidgets.QFrame):
         self.remaining = label(40, bold=True)
         self.target = label(40, bold=True)
         self.target.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.target_base = label(11)   # unadjusted watts, shown when FTP % isn't 100
+        self.target_base.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
+        target_col = QtWidgets.QVBoxLayout()
+        target_col.setSpacing(0)
+        target_col.addWidget(self.target)
+        target_col.addWidget(self.target_base)
         big.addWidget(self.remaining)
         big.addStretch()
-        big.addWidget(self.target)
+        big.addLayout(target_col)
         self.detail = label(11)        # cadence target / paused
         self.next = label(11)
         self.message = label(13, "#ffd166", bold=True)
@@ -651,6 +661,7 @@ class WorkoutPanel(QtWidgets.QFrame):
             self.group.setText("")
             self.remaining.setText("0:00")
             self.target.setText("")
+            self.target_base.setText(" ")  # keep the line, so the layout doesn't jump
             self.detail.setText("Trainer set to a flat road.")
             self.next.setText("")
             self.next_btn.setEnabled(False)
@@ -666,6 +677,12 @@ class WorkoutPanel(QtWidgets.QFrame):
         else:
             self.target.setText(s.describe(ftp))
             self.target.setStyleSheet(f"color:{COL_TEXT}; font-size:26pt; font-weight:600;")
+        # only % FTP targets are scaled by the FTP spinner; absolute watts never change
+        if s.kind == "ftp_pct" and snap["intensity"] != 100 and snap["base_ftp"]:
+            base_w = s.watts_at(snap["step_elapsed"], snap["base_ftp"])
+            self.target_base.setText(f"{base_w:.0f} W at 100%")
+        else:
+            self.target_base.setText(" ")  # keep the line, so the layout doesn't jump
 
         if not snap["started"]:
             self.detail.setText("Start pedalling to begin")
