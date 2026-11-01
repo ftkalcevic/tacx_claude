@@ -487,11 +487,12 @@ def zone_colour(watts: Optional[float], ftp: Optional[float]) -> str:
     return next(c for top, c in ZONES if pct < top)
 
 
-TRACES = {  # workout chart overlays: key -> (label, colour, trace column, axis)
-    "power": ("Power", "#ffffff", 1, "left"),
-    "hr": ("Heart rate", COL_HR, 3, "right"),
-    "cadence": ("Cadence", COL_CADENCE, 2, "right"),
+TRACES = {  # workout chart overlays: key -> (label, colour, trace column)
+    "power": ("Power", "#ffffff", 1),
+    "hr": ("Heart rate", COL_HR, 3),
+    "cadence": ("Cadence", COL_CADENCE, 2),
 }
+SCALES = {"hr": ("bpm", 60, 180), "cadence": ("rpm", 40, 120)}  # own axes: unit, default range
 PREFS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache", "dashboard.json")
 
 
@@ -533,45 +534,75 @@ class WorkoutProfile(pg.PlotWidget):
         self.marker.setZValue(30)
         self.addItem(self.marker)
 
-        # heart rate and cadence share a second view box with its own right-hand axis
+        # Heart rate and cadence each get their own view box and scale. Their axes sit in
+        # adjacent layout columns so the two axis lines meet: bpm labels on the left of the
+        # shared line (a "left" axis), rpm labels on the right of it (the "right" axis).
         pi = self.getPlotItem()
-        self.right_vb = pg.ViewBox(enableMouse=False)
-        self.right_vb.setZValue(25)
-        pi.showAxis("right")
-        pi.scene().addItem(self.right_vb)
-        pi.getAxis("right").linkToView(self.right_vb)
-        pi.getAxis("right").setLabel("bpm · rpm")
-        self.right_vb.setXLink(pi)
-        pi.vb.sigResized.connect(lambda: self.right_vb.setGeometry(pi.vb.sceneBoundingRect()))
+        rpm_axis = pi.getAxis("right")
+        pi.layout.removeItem(rpm_axis)
+        pi.layout.addItem(rpm_axis, 2, 3)   # row 2 is the plot row; column 2 takes bpm
+        bpm_axis = pg.AxisItem("left")
+        pi.layout.addItem(bpm_axis, 2, 2)
+        self.axes = {"hr": bpm_axis, "cadence": rpm_axis}
+        self.units = {}  # "bpm" / "rpm" written across the top of each scale
+        self.boxes = {"power": pi.vb}
+        for key, (unit, _lo, _hi) in SCALES.items():
+            vb = pg.ViewBox(enableMouse=False)
+            vb.setZValue(25)  # lines above the workout blocks
+            pi.scene().addItem(vb)
+            vb.setXLink(pi)
+            colour = TRACES[key][1]
+            ax = self.axes[key]
+            ax.linkToView(vb)
+            ax.setPen(pg.mkPen(colour))
+            ax.setTextPen(pg.mkPen(colour))
+            ax.setGrid(False)  # the grid belongs to the watts scale only
+            # unit label above the scale (row 1, over its axis), not rotated along it;
+            # bpm hugs the shared line from the left, rpm from the right
+            col = 2 if key == "hr" else 3
+            unit_lbl = pg.LabelItem(unit, color=colour, size="9pt", justify="right" if col == 2 else "left")
+            pi.layout.addItem(unit_lbl, 1, col)
+            self.units[key] = unit_lbl
+            # a fixed width that fits both the label and 3-digit ticks: if the label made
+            # one column wider than its axis, the two axis lines would no longer meet
+            digits = QtGui.QFontMetrics(QtWidgets.QApplication.font()).horizontalAdvance("000") + 18
+            ax.setWidth(int(max(digits, unit_lbl.preferredWidth() + 4)))
+            self.boxes[key] = vb
+        pi.vb.sigResized.connect(self._sync_boxes)
         self.curves = {}
-        for key, (_label, colour, _col, axis) in TRACES.items():
+        for key, (_label, colour, _col) in TRACES.items():
             c = QtGui.QColor(colour)
             c.setAlpha(200)
             curve = pg.PlotDataItem(pen=pg.mkPen(c, width=1.6), connect="finite")
             curve.setZValue(20)
-            (self.right_vb if axis == "right" else pi.vb).addItem(curve)
+            self.boxes[key].addItem(curve)
             self.curves[key] = curve
         self._data = []  # trace points copied from the player so far
         self.set_visible({"power": True, "hr": False, "cadence": False})
 
+    def _sync_boxes(self) -> None:
+        rect = self.getPlotItem().vb.sceneBoundingRect()
+        for key in SCALES:
+            self.boxes[key].setGeometry(rect)
+
     def set_visible(self, shown: dict) -> None:
         for key, curve in self.curves.items():
             curve.setVisible(bool(shown.get(key)))
-        right = any(shown.get(k) for k, v in TRACES.items() if v[3] == "right")
-        self.getPlotItem().getAxis("right").setVisible(right)
-        self._fit_right()
+        for key, axis in self.axes.items():
+            axis.setVisible(bool(shown.get(key)))
+            self.units[key].setVisible(bool(shown.get(key)))
+        self._fit_scales()
 
-    def _fit_right(self) -> None:
-        """Right axis range: covers the visible heart rate / cadence lines, at least 40-180."""
-        lo, hi = 40.0, 180.0
-        if self._data:
-            a = np.asarray(self._data, dtype=float)
-            for key, (_l, _c, col, axis) in TRACES.items():
-                if axis == "right" and self.curves[key].isVisible():
-                    vals = a[:, col][np.isfinite(a[:, col])]
-                    if len(vals):
-                        lo, hi = min(lo, vals.min() - 5), max(hi, vals.max() + 5)
-        self.right_vb.setYRange(lo, hi, padding=0)
+    def _fit_scales(self) -> None:
+        """Each of the HR and cadence scales covers its default range and its data (±5)."""
+        a = np.asarray(self._data, dtype=float) if self._data else None
+        for key, (_unit, lo, hi) in SCALES.items():
+            if a is not None:
+                col = TRACES[key][2]
+                vals = a[:, col][np.isfinite(a[:, col])]
+                if len(vals):
+                    lo, hi = min(lo, vals.min() - 5), max(hi, vals.max() + 5)
+            self.boxes[key].setYRange(max(0.0, lo), hi, padding=0)
 
     def _draw_blocks(self, ftp: Optional[float]) -> None:
         for b in self._blocks:
@@ -606,9 +637,9 @@ class WorkoutProfile(pg.PlotWidget):
         if snap["trace_len"] > len(self._data):  # new points: about once a second
             self._data += self.player.trace_since(len(self._data))
             a = np.asarray(self._data, dtype=float)  # None -> nan: gaps in the lines
-            for key, (_l, _c, col, _axis) in TRACES.items():
+            for key, (_l, _c, col) in TRACES.items():
                 self.curves[key].setData(a[:, 0] / 60, a[:, col])
-            self._fit_right()
+            self._fit_scales()
 
 
 class WorkoutPanel(QtWidgets.QFrame):
@@ -631,7 +662,7 @@ class WorkoutPanel(QtWidgets.QFrame):
         shown = {"power": True, "hr": False, "cadence": False, **self.prefs.get("workout_traces", {})}
         toggles = QtWidgets.QHBoxLayout()
         toggles.addWidget(QtWidgets.QLabel("Show:"))
-        for key, (label, colour, _col, _axis) in TRACES.items():
+        for key, (label, colour, _col) in TRACES.items():
             cb = QtWidgets.QCheckBox(label)
             cb.setChecked(shown[key])
             cb.setStyleSheet(f"QCheckBox {{ color:{colour}; font-weight:600; }}")

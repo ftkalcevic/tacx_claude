@@ -1,0 +1,14 @@
+{
+  // Fallback for files without a "$schema" key: gives IntelliSense and validation for
+  // workouts and riders (see schemas/ and workout_format.md).
+  "json.schemas": [
+    {
+      "fileMatch": ["/workouts/*.workout.json"],
+      "url": "./schemas/tacx-workout.schema.json"
+    },
+    {
+      "fileMatch": ["/user.json", "/users/*.json"],
+      "url": "./schemas/tacx-user.schema.json"
+    }
+  ]
+}
