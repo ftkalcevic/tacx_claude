@@ -1216,6 +1216,8 @@ def main() -> None:
     user_args(p)
     p.add_argument("--no-autopause", action="store_true",
                    help="keep the workout clock running when you stop pedalling")
+    p.add_argument("--no-beeps", action="store_true",
+                   help="no countdown beeps before each step change")
     p.add_argument("--replay", metavar="PCAPNG", help="play back a Bluetooth capture instead of connecting")
     p.add_argument("--replay-speed", type=float, default=1.0, help="replay speed multiplier")
     p.add_argument("--screenshot", metavar="PNG", help=argparse.SUPPRESS)

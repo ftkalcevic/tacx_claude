@@ -23,6 +23,7 @@ Keep workouts short (about 30 min) and conservative, with cadence at 85–95 rpm
 | `tacx_dashboard.py` | Qt dashboard: tiles, history charts, pedal-balance "peanut", workout panel (FTP % spinner, Next button). `ReplayWorker` plays back a BTVS `.pcapng` capture instead of connecting. |
 | `tacx_editor.py` | Qt visual workout editor: profile chart, step tree, property forms, live validation. |
 | `tacx_launcher.py` | Qt launcher: riders and workouts with cached thumbnails; launches the dashboard and editor as subprocesses. Remembers the last rider, workout and options. |
+| `tacx_sound.py` | Time-trial countdown beeps: a thread that watches `WorkoutPlayer.clock()` and plays generated tones through `winsound`. |
 | `tacx_ant.py` | ANT+ bicycle-power receiver for cycling dynamics, using `openant`. **Never tested with hardware.** |
 | `user.json`, `users/*.json` | Rider profiles (format `tacx-user`). |
 | `workouts/*.workout.json` | Workouts (format `tacx-workout`). `workouts/README.md` is the 6-week plan. |
@@ -136,8 +137,21 @@ Wireshark, saved at `C:\BTP\neo.pcapng`; that file is **not in the repo**).
 - **`QPushButton` stylesheets** with `objectName` (`#ride`) only apply after the
   app-wide stylesheet is set. Use `apply_launcher_theme` / `apply_editor_theme` in
   tests too.
-- **ERG ramps** are sent at most once a second, but step changes, Next and FTP %
-  changes are sent immediately (`WorkoutPlayer._command`).
+- **ERG ramps** are sent at most once a second, but step changes and FTP % changes
+  are sent immediately (`WorkoutPlayer._command`).
+- **Countdown beeps** (`tacx_sound.CountdownBeeper`) run on their own thread:
+  - It polls `player.clock()` every 5 ms. The clock returns (time to change, reading
+    time, running, change counter), and the thread projects the countdown forward
+    between the player's 10 Hz ticks. That keeps the pips on the second.
+  - Sounds are played with `winsound.PlaySound(..., SND_MEMORY)`, synchronously on
+    that thread.
+  - **Don't move the sound back to Qt.** `QSoundEffect` is fed from the GUI thread,
+    and its tones broke up ("starts, pauses, continues") while charts redrew.
+  - Each pip 5…1 plays once per step change (`last_pip`), so a pause/resume can't
+    repeat one. A change detected by a tick before the projection reached 0 still
+    gets its long tone.
+  - `next_step()` starts a 5-second countdown, timed from the press
+    (`_skip_pressed_at`). `skip_now()` jumps immediately.
 - **The FTMS resistance command** uses the FTMS 1.0 UINT8 form (0.5% steps). Later
   spec versions use SINT16. Untested.
 - **CLI console output is ASCII only.** Degree signs etc. garble in some consoles.

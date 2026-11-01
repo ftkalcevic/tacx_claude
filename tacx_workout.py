@@ -440,9 +440,14 @@ class WorkoutPlayer:
 
     tick() returns a trainer command when the target changes:
       ("erg", watts) | ("grade", percent) | ("resistance", percent)
+
+    Countdown beeps (tacx_sound.CountdownBeeper) read clock() to time a pip at
+    5, 4, 3, 2, 1 seconds before each step change and a long tone on it.
+    next_step() doesn't jump at once: it starts the same 5-second countdown.
     """
 
     AUTOPAUSE_S = 3.0
+    COUNTDOWN_S = 5
 
     def __init__(self, workout: Workout, ftp: Optional[float], autopause: bool = True):
         if workout.uses_ftp and not ftp:
@@ -477,6 +482,10 @@ class WorkoutPlayer:
         self._sent_time = 0.0
         self._force = True
         self._fired: set = set()
+        self.skip_remaining: Optional[float] = None  # Next pressed: seconds until the skip
+        self._skip_fresh = False
+        self._skip_pressed_at = 0.0
+        self.changes = 0  # step changes so far (including finishing), for the beeper
         self._lock = threading.RLock()
 
     # ----- controls (any thread) -----
@@ -495,11 +504,43 @@ class WorkoutPlayer:
             self._force = True
 
     def next_step(self) -> None:
+        """Skip to the next step after a 5-second countdown. Ignored while one is already running."""
         with self._lock:
-            if self.finished:
+            if self.finished or self.skip_remaining is not None:
                 return
-            self._advance()
-            self._force = True
+            if self.workout.steps[self.index].duration - self.step_elapsed <= self.COUNTDOWN_S:
+                return  # the step ends within the countdown anyway
+            self.skip_remaining = float(self.COUNTDOWN_S)
+            self._skip_fresh = True  # the next tick only counts the time since the press
+            self._skip_pressed_at = time.time()
+
+    def skip_now(self) -> None:
+        """Jump to the next step immediately (no countdown)."""
+        with self._lock:
+            if not self.finished:
+                self._change_step()
+
+    def clock(self) -> tuple:
+        """(time to change, time of that reading, running, changes) for the beeper, which
+        projects the countdown forward between ticks: ttc - (now - read_at) while running."""
+        with self._lock:
+            running = self.started and not self.paused and not self.finished
+            # just after Next, the 5 s countdown is measured from the press, not the last tick
+            read_at = self._skip_pressed_at if self._skip_fresh else (self._last_tick or 0.0)
+            return self.time_to_change(), read_at, running, self.changes
+
+    def time_to_change(self) -> Optional[float]:
+        """Seconds until the step changes: its end, or a pending skip if that's sooner."""
+        if self.finished:
+            return None
+        ttc = self.workout.steps[self.index].duration - self.step_elapsed
+        return ttc if self.skip_remaining is None else min(ttc, self.skip_remaining)
+
+    def _change_step(self) -> None:
+        self._advance()
+        self.skip_remaining = None
+        self._force = True
+        self.changes += 1
 
     # ----- state -----
     @property
@@ -538,9 +579,17 @@ class WorkoutPlayer:
                 self.paused = False
             if not self.paused and not self.finished:
                 self.step_elapsed += dt
+                if self.skip_remaining is not None:
+                    if self._skip_fresh:  # (0 with a test's fake clock, which isn't wall time)
+                        self._skip_fresh = False
+                        self.skip_remaining -= min(dt, max(0.0, now - self._skip_pressed_at))
+                    else:
+                        self.skip_remaining -= dt
+                if self.skip_remaining is not None and self.skip_remaining <= 0:
+                    self._change_step()
                 while not self.finished and self.step_elapsed >= self.workout.steps[self.index].duration:
                     over = self.step_elapsed - self.workout.steps[self.index].duration
-                    self._advance()
+                    self._change_step()
                     if not self.finished:
                         self.step_elapsed = over
                 if power is not None and not self.finished:
@@ -585,6 +634,8 @@ class WorkoutPlayer:
                 "step": s, "next": nxt, "index": self.index, "count": len(self.workout.steps),
                 "step_elapsed": self.step_elapsed,
                 "step_remaining": 0 if s is None else s.duration - self.step_elapsed,
+                "time_to_change": self.time_to_change() or 0,
+                "skip_in": self.skip_remaining,
                 "position": self.position, "total": self.workout.total_s,
                 "target_w": self.target_watts(), "paused": self.paused, "started": self.started,
                 "finished": self.finished, "ftp": self.ftp, "base_ftp": self.base_ftp,
@@ -613,7 +664,7 @@ async def send_command(neo, cmd) -> None:
         await neo.set_resistance(v)
 
 
-async def drive(player: WorkoutPlayer, neo, stop: asyncio.Event, period: float = 0.5) -> None:
+async def drive(player: WorkoutPlayer, neo, stop: asyncio.Event, period: float = 0.1) -> None:
     """Run the player against a connected TacxNeo until `stop` is set."""
     while not stop.is_set():
         cad, power = rider_inputs(neo.state)

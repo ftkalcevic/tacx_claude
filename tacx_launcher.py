@@ -329,6 +329,9 @@ class Launcher(QtWidgets.QMainWindow):
         self.hrm.setChecked(self.state.get("hrm", False))
         self.autopause = QtWidgets.QCheckBox("Pause when I stop pedalling")
         self.autopause.setChecked(self.state.get("autopause", True))
+        self.beeps = QtWidgets.QCheckBox("Countdown beeps")
+        self.beeps.setChecked(self.state.get("beeps", True))
+        self.beeps.toggled.connect(self._save_state)
         self.hrm.toggled.connect(self._save_state)
         self.autopause.toggled.connect(self._save_state)
         free = QtWidgets.QPushButton("Free ride ▶")
@@ -348,6 +351,7 @@ class Launcher(QtWidgets.QMainWindow):
         ll.addWidget(self._caption("Options"))
         ll.addWidget(self.hrm)
         ll.addWidget(self.autopause)
+        ll.addWidget(self.beeps)
         ll.addSpacing(10)
         ll.addWidget(free)
         ll.addWidget(new_w)
@@ -503,7 +507,8 @@ class Launcher(QtWidgets.QMainWindow):
         if self._loading:
             return
         self.state.update({"user": self.user_path, "workout": self.workout_path,
-                           "hrm": self.hrm.isChecked(), "autopause": self.autopause.isChecked()})
+                           "hrm": self.hrm.isChecked(), "autopause": self.autopause.isChecked(),
+                           "beeps": self.beeps.isChecked()})
         save_state(self.state)
 
     # ----- actions -----
@@ -527,6 +532,8 @@ class Launcher(QtWidgets.QMainWindow):
             args.append("--hrm")
         if not self.autopause.isChecked():
             args.append("--no-autopause")
+        if not self.beeps.isChecked():
+            args.append("--no-beeps")
         self._run(*args)
         self.status.setText(f"Starting {os.path.basename(path)} for {self.user.display_name}…")
 

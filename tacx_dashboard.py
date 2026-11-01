@@ -31,6 +31,7 @@ import pyqtgraph as pg
 
 import tacx_neo as tn
 import tacx_workout as tw
+from tacx_sound import CountdownBeeper
 
 HISTORY_S = 120          # length of the history charts
 PEANUT_REVS = 5          # revolutions averaged into the peanut
@@ -196,7 +197,7 @@ class ReplayWorker(threading.Thread):
                     fn(None, bytearray(value))
 
     def _tick_player(self) -> None:
-        while not self._stop.wait(0.5):
+        while not self._stop.wait(0.1):
             self.shared.player.tick(time.time(), *tw.rider_inputs(self.shared.state))
 
     def stop(self) -> None:
@@ -669,7 +670,17 @@ class WorkoutPanel(QtWidgets.QFrame):
 
         self.step_name.setText(f"{s.name}   ({snap['index'] + 1}/{snap['count']})")
         self.group.setText(s.group)
-        self.remaining.setText(tw.fmt_time(snap["step_remaining"]))
+        # counts down to the next change: the step's end, or a skip after Next
+        ttc = snap["time_to_change"]
+        self.remaining.setText(tw.fmt_time(math.ceil(ttc)))
+        final = ttc <= tw.WorkoutPlayer.COUNTDOWN_S
+        self.remaining.setStyleSheet(f"color:{'#ffd166' if final else COL_TEXT}; font-size:40pt; font-weight:600;")
+        if snap["skip_in"] is not None:
+            self.next_btn.setText(f"Next in {math.ceil(snap['skip_in'])}")
+            self.next_btn.setEnabled(False)
+        else:
+            self.next_btn.setText("Next  ▶")
+            self.next_btn.setEnabled(not final)  # Next is ignored once the step is about to end anyway
         target_w = snap["target_w"]
         if s.is_erg and target_w is not None:
             self.target.setText(f"{target_w:.0f} W")
@@ -703,7 +714,7 @@ class WorkoutPanel(QtWidgets.QFrame):
 
 
 class Dashboard(QtWidgets.QMainWindow):
-    def __init__(self, shared: Shared, worker):
+    def __init__(self, shared: Shared, worker, beeps: bool = True):
         super().__init__()
         self.shared, self.worker = shared, worker
         self.setWindowTitle("Tacx NEO Dashboard")
@@ -741,6 +752,10 @@ class Dashboard(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(100)
+        # countdown beeps run on their own thread, so redraws here can't break them up
+        self.beeper = CountdownBeeper(shared.player) if beeps and shared.player else None
+        if self.beeper:
+            self.beeper.start()
 
     def _panel(self, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QFrame:
         f = QtWidgets.QFrame()
@@ -808,6 +823,8 @@ class Dashboard(QtWidgets.QMainWindow):
 
     def closeEvent(self, ev) -> None:
         self.timer.stop()
+        if self.beeper:
+            self.beeper.stop()
         self.worker.stop()
         self.worker.join(timeout=5)
         super().closeEvent(ev)
@@ -840,7 +857,7 @@ def run(args) -> None:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     _apply_theme(app)
     worker = (ReplayWorker if args.replay else TrainerWorker)(shared, args)
-    win = Dashboard(shared, worker)
+    win = Dashboard(shared, worker, beeps=not getattr(args, "no_beeps", False))
     avail = app.primaryScreen().availableGeometry()  # don't open bigger than the screen
     win.resize(min(win.width(), avail.width()), min(win.height(), avail.height()))
     worker.start()
