@@ -143,6 +143,9 @@ Each step has a `duration` and **exactly one** target key.
 How the player behaves:
 - **Starting:** the workout clock starts when you start pedalling. The first target is
   sent straight away.
+- **Messages** (`text`) appear in large type over the middle of the dashboard for 10
+  seconds, fading in and out. They never fire before you start pedalling, so a message
+  at `0:00` appears as you set off.
 - **Step changes** happen exactly on the boundary, and the next target is sent right
   away.
 - **Pausing:** if cadence stays at 0 for 3 s, the workout clock pauses, and it resumes

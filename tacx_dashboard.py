@@ -37,6 +37,7 @@ HISTORY_S = 120          # length of the history charts
 PEANUT_REVS = 5          # revolutions averaged into the peanut
 PEANUT_BIN_DEG = 10      # angular resolution of the averaged peanut
 STALE_S = 3.0            # values older than this show as "--"
+MESSAGE_S = 10.0         # how long a workout text message stays on screen
 
 COL_POWER = "#ff9f1c"
 COL_CADENCE = "#2ec4b6"
@@ -591,7 +592,6 @@ class WorkoutPanel(QtWidgets.QFrame):
         big.addLayout(target_col)
         self.detail = label(11)        # cadence target / paused
         self.next = label(11)
-        self.message = label(13, "#ffd166", bold=True)
         prog = QtWidgets.QHBoxLayout()
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 1000)
@@ -640,7 +640,6 @@ class WorkoutPanel(QtWidgets.QFrame):
         info.addLayout(big)
         info.addWidget(self.detail)
         info.addWidget(self.next)
-        info.addWidget(self.message)
         info.addStretch()
         info.addLayout(prog)
         info.addSpacing(6)
@@ -655,7 +654,6 @@ class WorkoutPanel(QtWidgets.QFrame):
             self.ftp_txt.setText("  absolute watts\n  (no FTP scaling)")
         self.progress.setValue(int(1000 * snap["position"] / snap["total"]) if snap["total"] else 0)
         self.total.setText(f"  {tw.fmt_time(snap['position'])} / {tw.fmt_time(snap['total'])}")
-        self.message.setText(snap["message"] if snap["message"] and snap["message_age"] < 10 else "")
 
         if snap["finished"] or s is None:
             self.step_name.setText("Workout complete")
@@ -713,6 +711,49 @@ class WorkoutPanel(QtWidgets.QFrame):
                           f"Next:  {n.name}  ·  {tw.fmt_time(n.duration)}  @  {n.describe(ftp)}")
 
 
+class MessageOverlay(QtWidgets.QLabel):
+    """A workout text message in large type, floating over the middle of the window.
+    Fades in and out, and lets mouse clicks through to the controls underneath."""
+
+    FADE_S = 0.4
+
+    def __init__(self, parent: QtWidgets.QWidget):
+        super().__init__(parent)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setWordWrap(True)
+        self.setStyleSheet("color:#ffffff; font-size:40pt; font-weight:700;"
+                           " background:rgba(13, 17, 23, 215); border:3px solid #ffd166;"
+                           " border-radius:18px; padding:28px 44px;")
+        self.opacity = QtWidgets.QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity)
+        self._text = None
+        self.hide()
+
+    def show_message(self, text: Optional[str], age: float) -> None:
+        if not text or age >= MESSAGE_S:
+            self.hide()
+            self._text = None
+            return
+        if text != self._text:
+            self._text = text
+            self.setText(text)
+            self.place()
+        self.opacity.setOpacity(max(0.0, min(1.0, age / self.FADE_S, (MESSAGE_S - age) / self.FADE_S)))
+        self.show()
+        self.raise_()
+
+    def place(self) -> None:
+        """Centre over the parent, at most 80% of its width, wrapping long messages."""
+        win = self.parentWidget()
+        self.ensurePolished()  # so the stylesheet's 40 pt font is in fontMetrics()
+        one_line = self.fontMetrics().horizontalAdvance(self.text()) + 2 * 44 + 2 * 3 + 8
+        w = min(int(win.width() * 0.8), one_line)  # one line if it fits, else wrap at 80%
+        self.setFixedWidth(w)
+        self.setFixedHeight(self.heightForWidth(w))
+        self.move((win.width() - w) // 2, (win.height() - self.height()) // 2)
+
+
 class Dashboard(QtWidgets.QMainWindow):
     def __init__(self, shared: Shared, worker, beeps: bool = True):
         super().__init__()
@@ -749,6 +790,7 @@ class Dashboard(QtWidgets.QMainWindow):
         self._seen_revs = -1
         self._last_hist = 0.0
         self.peanut.reset()
+        self.overlay = MessageOverlay(self)  # child of the window: drawn over everything
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(100)
@@ -809,7 +851,9 @@ class Dashboard(QtWidgets.QMainWindow):
             self.balance.set(None, None, None)
 
         if self.workout:
-            self.workout.update_view(sh.player.snapshot(), cad)
+            snap = sh.player.snapshot()
+            self.workout.update_view(snap, cad)
+            self.overlay.show_message(snap["message"], snap["message_age"])
 
         if now - self._last_hist >= 0.5:
             self._last_hist = now
@@ -820,6 +864,10 @@ class Dashboard(QtWidgets.QMainWindow):
             self.peanut.update_revs(list(sh.revs)[-PEANUT_REVS:])
         elif sh.revs and now - sh.revs[-1].timestamp > STALE_S:
             self.peanut.reset()
+
+    def resizeEvent(self, ev) -> None:
+        super().resizeEvent(ev)
+        self.overlay.place()
 
     def closeEvent(self, ev) -> None:
         self.timer.stop()

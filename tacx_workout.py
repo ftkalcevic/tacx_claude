@@ -595,7 +595,7 @@ class WorkoutPlayer:
                 if power is not None and not self.finished:
                     self.trace.append((self.position, power))
             s = self.step
-            if s is not None:
+            if s is not None and self.started:  # not before the rider starts pedalling
                 for j, (at, msg) in enumerate(s.texts):
                     if (self.index, j) not in self._fired and self.step_elapsed >= at:
                         self._fired.add((self.index, j))
