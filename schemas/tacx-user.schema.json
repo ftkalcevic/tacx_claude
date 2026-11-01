@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tacx-user.schema.json",
+  "title": "Tacx rider profile",
+  "description": "A rider for tacx_neo.py. See workout_format.md. Workouts take FTP and weight from here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "name", "weight_kg", "ftp"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to this schema, for editor IntelliSense. Ignored by the program."
+    },
+    "format": { "const": "tacx-user", "description": "Always \"tacx-user\"." },
+    "version": { "const": 1, "description": "Format version, currently 1." },
+    "name": { "type": "string", "minLength": 1, "description": "Full name." },
+    "nickname": { "type": "string", "description": "Short name shown on the dashboard. Defaults to name." },
+    "dob": {
+      "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date of birth, YYYY-MM-DD. Used to estimate max HR when max_hr isn't given."
+    },
+    "sex": { "enum": ["male", "female"], "description": "Reserved for future calorie and zone estimates." },
+    "weight_kg": {
+      "type": "number", "minimum": 30, "maximum": 200,
+      "description": "Rider weight in kg. Sent to the trainer for slope-mode physics, and used for W/kg."
+    },
+    "height_cm": { "type": "number", "minimum": 100, "maximum": 230, "description": "Height in cm (reserved)." },
+    "ftp": {
+      "type": "number", "minimum": 50, "maximum": 600,
+      "description": "Functional threshold power in watts. Every ftp_pct workout target is a percentage of this."
+    },
+    "ftp_tested": {
+      "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "When the FTP was last tested, YYYY-MM-DD."
+    },
+    "max_hr": { "type": "integer", "minimum": 120, "maximum": 230, "description": "Maximum heart rate, bpm." },
+    "resting_hr": { "type": "integer", "minimum": 30, "maximum": 100, "description": "Resting heart rate, bpm." },
+    "bike_weight_kg": {
+      "type": "number", "minimum": 3, "maximum": 40,
+      "description": "Bike weight in kg, sent to the trainer. Default 8."
+    }
+  },
+  "defaultSnippets": [
+    {
+      "label": "New rider",
+      "body": {
+        "$schema": "${1:schemas/tacx-user.schema.json}",
+        "format": "tacx-user",
+        "version": 1,
+        "name": "${2:Full Name}",
+        "nickname": "${3:Nick}",
+        "weight_kg": "^${4:75}",
+        "ftp": "^${5:150}"
+      }
+    }
+  ]
+}

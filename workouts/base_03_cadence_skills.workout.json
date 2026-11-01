@@ -1,4 +1,5 @@
 {
+  "$schema": "../schemas/tacx-workout.schema.json",
   "format": "tacx-workout",
   "version": 1,
   "name": "Base 03 - Cadence Skills",

@@ -26,6 +26,7 @@ Keep workouts short (about 30 min) and conservative, with cadence at 85–95 rpm
 | `tacx_ant.py` | ANT+ bicycle-power receiver for cycling dynamics, using `openant`. **Never tested with hardware.** |
 | `user.json`, `users/*.json` | Rider profiles (format `tacx-user`). |
 | `workouts/*.workout.json` | Workouts (format `tacx-workout`). `workouts/README.md` is the 6-week plan. |
+| `schemas/*.schema.json` | JSON Schemas for both formats, used by VS Code IntelliSense and mapped in `.vscode/settings.json`. |
 | `.cache/` | Thumbnails (`thumbnails/<sha1>.png`) and `launcher.json` state. Not source; don't commit it. |
 
 Dependencies are in `requirements.txt` and installed in `.venv` (Python 3.14 on the
@@ -147,8 +148,20 @@ Wireshark, saved at `C:\BTP\neo.pcapng`; that file is **not in the repo**).
   *why*, and pure parser functions kept separate from I/O.
 - The CLI prints to the console. GUIs share colours and zone logic from
   `tacx_dashboard.py` (`COL_*`, `ZONES`, `zone_colour`).
-- New file formats or fields need `workout_format.md` updated and validation errors
-  that give the location in the file.
+- New file formats or fields need three updates:
+  - `workout_format.md`;
+  - the loader's validation, with errors that give the location in the file;
+  - **the JSON Schemas in `schemas/`.**
+
+  The schemas and the loader must accept and reject the same files. The only planned
+  difference is checks the schema can't express, such as message times past the end
+  of their step and FTP-dependent watt limits. To check this:
+  1. `pip install jsonschema` (a dev-only tool, not in `requirements.txt`);
+  2. validate every file in `workouts/` plus `user.json` against the schemas;
+  3. compare the results with `tacx_neo.py check`.
+
+  `"$schema"` is an allowed key in both formats. Writers add it with
+  `tacx_workout.with_schema()`, which builds a path relative to the saved file.
 - Workout and user JSON is hand-edited by the owner. Keep it readable, with
   `"M:SS"` durations.
 

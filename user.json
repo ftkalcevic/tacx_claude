@@ -1,4 +1,5 @@
 {
+  "$schema": "schemas/tacx-user.schema.json",
   "format": "tacx-user",
   "version": 1,
   "name": "Frank Tkalcevic",

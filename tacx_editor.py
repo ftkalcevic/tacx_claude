@@ -600,7 +600,7 @@ class Editor(QtWidgets.QMainWindow):
                 != QtWidgets.QMessageBox.Yes:
             return False
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.doc, f, indent=2, ensure_ascii=False)
+            json.dump(tw.with_schema(self.doc, tw.WORKOUT_SCHEMA, path), f, indent=2, ensure_ascii=False)
             f.write("\n")
         self.path = path
         self.dirty = False

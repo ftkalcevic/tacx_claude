@@ -30,6 +30,7 @@ rider, and keeps working as your FTP changes.
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
+| `$schema` | string | no | Path to `schemas/tacx-user.schema.json`, for editor IntelliSense. Ignored by the program. |
 | `format` | string | yes | Always `"tacx-user"`. |
 | `version` | integer | yes | Format version, currently `1`. |
 | `name` | string | yes | Full name. |
@@ -96,6 +97,7 @@ last section.
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
+| `$schema` | string | no | Path to `schemas/tacx-workout.schema.json`, for editor IntelliSense. Ignored by the program. |
 | `format` | string | yes | Always `"tacx-workout"`. |
 | `version` | integer | yes | Format version, currently `1`. |
 | `name` | string | yes | Shown on the dashboard. |
@@ -184,6 +186,26 @@ for example `steps[1].steps[0]`:
 
 It also prints a summary: the total time, and the expanded list of steps with each
 repeat written out.
+
+## Editing in VS Code (JSON Schema)
+
+`schemas/tacx-workout.schema.json` and `schemas/tacx-user.schema.json` describe both
+formats as JSON Schema (draft-07). VS Code's built-in JSON support uses them to give:
+- completion for keys and values, plus snippets such as "Step: ramp", "Repeat block
+  (on/off)", "New workout" and "New rider";
+- hover descriptions for every field;
+- red squiggles for wrong types, missing or unknown keys, out-of-range values, and steps
+  without exactly one target.
+
+A file names its schema in a `"$schema"` key, e.g.
+`"$schema": "../schemas/tacx-workout.schema.json"` for a workout in `workouts\`. The
+editor and the launcher's rider form write this key when they save. For files without
+it, `.vscode/settings.json` maps `workouts/*.workout.json`, `user.json` and
+`users/*.json` to the schemas.
+
+A schema can't check everything. Message times past the end of their step, and watt
+limits that depend on your FTP, are only checked by `tacx_neo.py check` and when the
+workout loads.
 
 ## Importing Zwift `.zwo` files
 

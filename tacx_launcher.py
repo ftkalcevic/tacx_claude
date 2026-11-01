@@ -252,7 +252,7 @@ class RiderDialog(QtWidgets.QDialog):
                 self.path = os.path.join(USER_DIR, f"{base}_{n}.json")
                 n += 1
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(d, f, indent=2, ensure_ascii=False)
+            json.dump(tw.with_schema(d, tw.USER_SCHEMA, self.path), f, indent=2, ensure_ascii=False)
             f.write("\n")
         self.accept()
 

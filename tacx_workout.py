@@ -29,6 +29,28 @@ log = logging.getLogger("tacx_workout")
 MAX_ERG_W = 2000          # NEO 2T limit is 2200 W
 INTENSITY_RANGE = (50, 150)
 
+# JSON Schemas for editor IntelliSense. Files may name theirs in a "$schema" key, which
+# the loaders accept and ignore. Keep the schemas in step with the checks below.
+SCHEMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schemas")
+USER_SCHEMA = "tacx-user.schema.json"
+WORKOUT_SCHEMA = "tacx-workout.schema.json"
+
+
+def schema_ref(schema: str, file_path: str) -> str:
+    """The "$schema" value for a file saved at file_path: relative to it where possible."""
+    target = os.path.join(SCHEMA_DIR, schema)
+    try:
+        return os.path.relpath(target, os.path.dirname(os.path.abspath(file_path))).replace(os.sep, "/")
+    except ValueError:  # different drive on Windows
+        return "file:///" + target.replace(os.sep, "/")
+
+
+def with_schema(doc: dict, schema: str, file_path: str) -> dict:
+    """A copy of doc with "$schema" first, pointing at the schema from file_path."""
+    out = {"$schema": schema_ref(schema, file_path)}
+    out.update((k, v) for k, v in doc.items() if k != "$schema")
+    return out
+
 
 class WorkoutError(ValueError):
     pass
@@ -116,7 +138,7 @@ class UserProfile:
         return self.max_hr or (220 - self.age if self.age else None)
 
 
-USER_KEYS = {"format", "version", "name", "nickname", "dob", "sex", "weight_kg", "height_cm",
+USER_KEYS = {"$schema", "format", "version", "name", "nickname", "dob", "sex", "weight_kg", "height_cm",
              "ftp", "ftp_tested", "max_hr", "resting_hr", "bike_weight_kg"}
 
 
@@ -186,7 +208,7 @@ def parse_user(d, path: str = "") -> UserProfile:
 TARGET_KEYS = ("ftp_pct", "watts", "grade", "resistance", "free")
 STEP_KEYS = {"name", "duration", "cadence", "text", *TARGET_KEYS}
 REPEAT_KEYS = {"repeat", "steps", "name"}
-WORKOUT_KEYS = {"format", "version", "name", "description", "author", "steps"}
+WORKOUT_KEYS = {"$schema", "format", "version", "name", "description", "author", "steps"}
 
 
 @dataclass
