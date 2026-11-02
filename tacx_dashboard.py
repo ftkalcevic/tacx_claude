@@ -65,6 +65,7 @@ class Shared:
         self.hrm: Optional[tn.HeartRateMonitor] = None  # set when a strap is in use
         self.user: Optional[tw.UserProfile] = None
         self.player: Optional[tw.WorkoutPlayer] = None  # set when riding a workout
+        self.stats: Optional[tn.SessionStats] = None    # the ride's running totals (energy etc.)
 
     def add_rev(self, rev: tn.Revolution) -> None:
         self.revs.append(rev)
@@ -100,6 +101,7 @@ class TrainerWorker(threading.Thread):
                 neo.stroke.right_first = not a.swap_lr
                 neo.on_update = lambda s: setattr(self.shared, "state", s)
                 neo.on_revolution = self.shared.add_rev
+                self.shared.stats = neo.stats
                 weight, bike = _weights(a, self.shared.user)
                 if weight:
                     await neo.set_user_config(weight, bike)
@@ -187,6 +189,7 @@ class ReplayWorker(threading.Thread):
             neo.stroke.right_first = not self.args.swap_lr
             neo.on_update = lambda s: setattr(self.shared, "state", s)
             neo.on_revolution = self.shared.add_rev
+            self.shared.stats = neo.stats
             handlers = {self.H_CPS_MEASUREMENT: neo._on_cps, self.H_VECTOR: neo._on_vector,
                         self.H_FEC_RX: neo._on_fec}
             self.shared.status = f"Replaying {self.args.replay} at {speed:g}x"
@@ -209,13 +212,15 @@ class ReplayWorker(threading.Thread):
 
 # --- Widgets -----------------------------------------------------------------
 class Tile(QtWidgets.QFrame):
-    """A big number with a caption and unit."""
+    """A big number with a caption and unit. The dashboard sizes it once, from the widest
+    text it's expected to show (widest()), so it never changes size during a ride."""
 
-    def __init__(self, caption: str, unit: str, color: str):
+    def __init__(self, caption: str, unit: str, color: str, widest_value: str = "888",
+                 widest_sub: str = ""):
         super().__init__()
         self.setObjectName("tile")
-        # Width is shared equally by the row and height is fixed, whatever the text says:
-        # sizing from the text made the tiles shift as numbers changed width.
+        self.widest_value, self.widest_sub = widest_value, widest_sub
+        # the dashboard sets the width; the text inside never resizes the tile
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(16, 10, 16, 10)
@@ -237,6 +242,11 @@ class Tile(QtWidgets.QFrame):
         lay.addLayout(row)
         lay.addWidget(self.sub)
 
+    def widest(self) -> int:
+        """Width this tile needs to show its widest expected value and second line."""
+        return _measure(self, lambda: self.set(self.widest_value, self.widest_sub),
+                        (self.value, self.sub))
+
     def set(self, text: str, sub: str = "") -> None:
         self.value.setText(text)
         self.sub.setText(sub or " ")
@@ -248,14 +258,14 @@ class BalanceTile(QtWidgets.QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("tile")
-        # Width is shared equally by the row and height is fixed, whatever the text says:
-        # sizing from the text made the tiles shift as numbers changed width.
+        # the dashboard sets the width; the text inside never resizes the tile
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(16, 10, 16, 10)
         cap = QtWidgets.QLabel("PEDAL BALANCE")
         cap.setStyleSheet(f"color:{COL_TEXT}; font-size:11pt; letter-spacing:2px;")
         row = QtWidgets.QHBoxLayout()
+        row.setSpacing(16)  # keeps the two percentages apart at the measured width
         self.left = QtWidgets.QLabel("--")
         self.left.setStyleSheet(f"color:{COL_LEFT}; font-size:30pt; font-weight:600;")
         self.right = QtWidgets.QLabel("--")
@@ -278,6 +288,15 @@ class BalanceTile(QtWidgets.QFrame):
         lay.addWidget(self.bar)
         lay.addWidget(self.watts)
 
+    def widest(self) -> int:
+        """Width needed for the widest percentages and watts line. The two sides always add
+        up to 100, so the widest pair is "L 100%" with "0% R" (every digit is the same width)."""
+        def fill():
+            self.left.setText("L 100%")
+            self.right.setText("0% R")
+            self.watts.setText("1888 W  /  1888 W")
+        return _measure(self, fill, (self.left, self.right, self.watts))
+
     def set(self, left_pct: Optional[float], lw: Optional[float], rw: Optional[float]) -> None:
         if left_pct is None:
             self.left.setText("L --")
@@ -289,6 +308,18 @@ class BalanceTile(QtWidgets.QFrame):
         self.right.setText(f"{100 - left_pct:.0f}% R")
         self.bar.setValue(int(left_pct * 10))
         self.watts.setText(" " if lw is None else f"{lw:.0f} W  /  {rw:.0f} W")
+
+
+def _measure(tile: QtWidgets.QWidget, fill, labels) -> int:
+    """Width the tile's layout asks for with fill() applied; the labels' text is put back."""
+    saved = [lbl.text() for lbl in labels]
+    for w in tile.findChildren(QtWidgets.QLabel):
+        w.ensurePolished()  # stylesheet font sizes in place before measuring
+    fill()
+    width = tile.layout().sizeHint().width()
+    for lbl, text in zip(labels, saved):
+        lbl.setText(text)
+    return width
 
 
 class Peanut(pg.PlotWidget):
@@ -900,23 +931,33 @@ class Dashboard(QtWidgets.QMainWindow):
         self.setWindowTitle("Tacx NEO Dashboard")
         self.resize(1400, 1140 if shared.player else 860)
 
-        self.power = Tile("Power", "W", COL_POWER)
-        self.cadence = Tile("Cadence", "rpm", COL_CADENCE)
-        self.speed = Tile("Virtual speed", "km/h", COL_SPEED)
-        self.hr = Tile("Heart rate", "bpm", COL_HR)
+        # widest text each tile is expected to show: sets the tile widths once, at start-up
+        self.power = Tile("Power", "W", COL_POWER, "888", "8888 kJ")
+        self.cadence = Tile("Cadence", "rpm", COL_CADENCE, "188")
+        self.speed = Tile("Virtual speed", "km/h", COL_SPEED, "88.8", "distance 88.88 km")
+        self.hr = Tile("Heart rate", "bpm", COL_HR, "188", "HRM 200  ·  battery 100%")
         self.balance = BalanceTile()
         self.peanut = Peanut()
         self.history = History()
         self.workout = WorkoutPanel(shared.player, shared.user) if shared.player else None
 
         tiles = QtWidgets.QHBoxLayout()
+        tiles.setSpacing(8)  # with the measured widths, keeps the row within a 1080 px window
         row = (self.power, self.cadence, self.speed, self.hr, self.balance)
         for t in row:
             t.ensurePolished()  # apply the stylesheet fonts before measuring
+        # Widths are measured once from each tile's widest expected text, never from the live
+        # values, so no tile changes size during a ride. The four number tiles share the
+        # widest of their widths; pedal balance gets its own (wider) one. Spare window width
+        # is shared in proportion (stretch = width), so a resized window keeps that look.
+        num_w = max(t.widest() for t in row[:4])
+        widths = {t: num_w for t in row[:4]}
+        widths[self.balance] = max(self.balance.widest(), num_w + 1)
         tile_h = max(t.sizeHint().height() for t in row)
         for t in row:
             t.setFixedHeight(tile_h)  # one height for the whole row
-            tiles.addWidget(t, 1)
+            t.setMinimumWidth(widths[t])
+            tiles.addWidget(t, widths[t])
         body = QtWidgets.QHBoxLayout()
         body.addWidget(self._panel("Pedal stroke", self.peanut), 5)
         body.addWidget(self._panel("Last 2 minutes", self.history), 6)
@@ -973,10 +1014,7 @@ class Dashboard(QtWidgets.QMainWindow):
         if live:
             power = s.power_w if s.power_w is not None else s.cps_power_w
             cad = s.cadence_rpm if s.cadence_rpm is not None else s.crank_cadence_rpm
-            target = sh.player.target_watts() if sh.player else None
-            self.power.set("--" if power is None else f"{power:.0f}",
-                           f"target {target:.0f} W" if target is not None
-                           else "" if s.fe_state is None else f"trainer {s.fe_state}")
+            self.power.set("--" if power is None else f"{power:.0f}", self._energy_text())
             self.cadence.set("--" if cad is None else f"{cad:.0f}")
             dist = "" if s.distance_m is None else f"distance {s.distance_m / 1000:.2f} km"
             self.speed.set("--" if s.speed_kmh is None else f"{s.speed_kmh:.1f}", dist)
@@ -992,6 +1030,7 @@ class Dashboard(QtWidgets.QMainWindow):
             power = cad = None
             for t in (self.power, self.cadence, self.speed):
                 t.set("--")
+            self.power.set("--", self._energy_text())  # the ride's total stays on show
             self.balance.set(None, None, None)
 
         if self.workout:
@@ -1012,6 +1051,13 @@ class Dashboard(QtWidgets.QMainWindow):
     def resizeEvent(self, ev) -> None:
         super().resizeEvent(ev)
         self.overlay.place()
+
+    def _energy_text(self) -> str:
+        """Work done at the pedals this ride, in kJ."""
+        if self.shared.stats is None:
+            return ""
+        kj = self.shared.stats.energy_j / 1000
+        return f"{kj:.1f} kJ" if kj < 10 else f"{kj:.0f} kJ"
 
     def closeEvent(self, ev) -> None:
         self.timer.stop()
