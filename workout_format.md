@@ -151,9 +151,9 @@ How the player behaves:
 - **Pausing:** if cadence stays at 0 for 3 s, the workout clock pauses, and it resumes
   when you start pedalling again. This is on by default and turned off with
   `--no-autopause`.
-- **Countdown beeps:** like a time-trial start clock. A short pip sounds at 5, 4, 3, 2
-  and 1 seconds before each step change, then one long, higher tone as the step
-  changes. The step's time turns yellow for the last 5 seconds. Turn the beeps off with
+- **Countdown beeps:** like a time-trial start clock. A short pip sounds at 10 seconds
+  to go, then at 5, 4, 3, 2 and 1 seconds before each step change, then one long,
+  higher tone as the step changes. (Pressing Next starts at the 5-second pip.) The step's time turns yellow for the last 5 seconds. Turn the beeps off with
   `--no-beeps` or the launcher's "Countdown beeps" option.
 - **Next button:** starts the same 5-second countdown, with the first pip straight away,
   then moves to the next step. The button shows "Next in 4…" while the countdown runs.

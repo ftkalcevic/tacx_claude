@@ -147,8 +147,10 @@ Wireshark, saved at `C:\BTP\neo.pcapng`; that file is **not in the repo**).
     that thread.
   - **Don't move the sound back to Qt.** `QSoundEffect` is fed from the GUI thread,
     and its tones broke up ("starts, pauses, continues") while charts redrew.
-  - Each pip 5…1 plays once per step change (`last_pip`), so a pause/resume can't
-    repeat one. A change detected by a tick before the projection reached 0 still
+  - Pips sound at 10 s and then 5…1 s to go (`CountdownBeeper.PIPS`, checked lowest
+    first). When Next drops the countdown straight to 5 s, past both 10 and 5, it sounds
+    once, as the 5. Each pip plays once per step change (`last_pip`), so a pause/resume
+    can't repeat one. A change detected by a tick before the projection reached 0 still
     gets its long tone.
   - `next_step()` starts a 5-second countdown, timed from the press
     (`_skip_pressed_at`). `skip_now()` jumps immediately.

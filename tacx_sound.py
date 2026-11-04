@@ -1,8 +1,8 @@
 """
 tacx_sound.py - time-trial start clock beeps for a running workout.
 
-A short pip at 5, 4, 3, 2 and 1 seconds before each step change, then one long,
-higher tone on the change. The beeps run on their own thread, away from the GUI,
+A short pip at 10 seconds to go, then at 5, 4, 3, 2 and 1 seconds before each step
+change, then one long, higher tone on the change. The beeps run on their own thread, away from the GUI,
 for two reasons:
 
   * Playback goes through Windows' PlaySound, synchronously on this thread, so chart
@@ -52,6 +52,7 @@ class CountdownBeeper(threading.Thread):
     PIP = (1000, 0.15)   # Hz, seconds
     GO = (1400, 0.9)
     POLL_S = 0.005
+    PIPS = (1, 2, 3, 4, 5, 10)  # seconds to go, lowest first: see run()
 
     def __init__(self, player):
         super().__init__(daemon=True, name="tacx-beeps")
@@ -90,7 +91,9 @@ class CountdownBeeper(threading.Thread):
                 continue
             est = ttc - (time.time() - read_at) if running else ttc
             if prev_est is not None and running:
-                for n in range(self.player.COUNTDOWN_S, 0, -1):
+                # Lowest crossing first: pressing Next drops the countdown straight to 5 s,
+                # crossing both 10 and 5, and that should sound once, as the 5.
+                for n in self.PIPS:
                     # a pause freezes the projection slightly above where it was, so
                     # without the last_pip check a pip could repeat on resuming
                     if prev_est > n >= est and (last_pip is None or n < last_pip):
