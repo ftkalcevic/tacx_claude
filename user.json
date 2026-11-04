@@ -4,8 +4,8 @@
   "version": 1,
   "name": "Frank Tkalcevic",
   "nickname": "Frank",
+  "dob": "1968-11-19",
   "weight_kg": 115.0,
-  "ftp": 145,
-  "bike_weight_kg": 8.5,
-  "dob" : "1968-11-19"
+  "ftp": 165,
+  "bike_weight_kg": 8.5
 }

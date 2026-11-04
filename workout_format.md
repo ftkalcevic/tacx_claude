@@ -158,9 +158,20 @@ How the player behaves:
 - **Next button:** starts the same 5-second countdown, with the first pip straight away,
   then moves to the next step. The button shows "Next in 4…" while the countdown runs.
   It does nothing when the step is already within 5 seconds of its end.
+- **Time spinner** (left of FTP): makes the session longer or shorter, 50–200% in 5%
+  steps, default 100%. The current and later steps take that percentage of their
+  written duration, rounded to the nearest second, and their messages and ramps move
+  with them. The spinner shows the adjusted total time above it and the workout's own
+  length below it.
+  - It changes the workout's steps, not real time. Steps already ridden keep their
+    durations, and time ridden in the current step is kept.
+  - If shortening would end the current step at once, it ends after the 5-second
+    countdown instead.
+  - Messages keep their relative position, so a fixed-time message such as "First block
+    in 30 s" won't say the right number any more.
 - **FTP spinner:** sets FTP as a percentage, 50–150% in 1% steps, default 100%. All
-  `ftp_pct` targets change at once. The base FTP from the user file and the adjusted
-  FTP are shown beside it. `watts` steps aren't affected.
+  `ftp_pct` targets change at once. The adjusted FTP is shown above it and the base FTP
+  from the user file below it. `watts` steps aren't affected.
 - **Finishing:** at the end of the workout the trainer switches to basic resistance mode
   at a light 10% load, a plain brake. A 0% slope isn't used here: slope mode simulates
   the bike's momentum, so the NEO would keep the flywheel spinning on its own after you

@@ -17,17 +17,19 @@ import asyncio
 import datetime
 import json
 import logging
+import math
 import os
 import threading
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 log = logging.getLogger("tacx_workout")
 
 MAX_ERG_W = 2000          # NEO 2T limit is 2200 W
 INTENSITY_RANGE = (50, 150)
+DURATION_RANGE = (50, 200)  # session length override, % of each step's duration
 
 # JSON Schemas for editor IntelliSense. Files may name theirs in a "$schema" key, which
 # the loaders accept and ignore. Keep the schemas in step with the checks below.
@@ -464,12 +466,12 @@ class WorkoutPlayer:
         self.workout = workout
         self.base_ftp = ftp
         self.intensity_pct = 100
+        self.duration_pct = 100
+        self._base_steps = list(workout.steps)  # as written; workout.steps holds the scaled ones
+        self.layout_version = 0                 # bumped when durations change, for displays
         self.autopause = autopause
         self.starts = []
-        t = 0.0
-        for s in workout.steps:
-            self.starts.append(t)
-            t += s.duration
+        self._layout()
         self.index = 0
         self.step_elapsed = 0.0
         self.started = False
@@ -496,6 +498,47 @@ class WorkoutPlayer:
     @property
     def ftp(self) -> Optional[float]:
         return None if self.base_ftp is None else self.base_ftp * self.intensity_pct / 100
+
+    def _layout(self) -> None:
+        """Start time of each step on the workout timeline."""
+        self.starts, t = [], 0.0
+        for s in self.workout.steps:
+            self.starts.append(t)
+            t += s.duration
+
+    @property
+    def base_total_s(self) -> float:
+        return sum(s.duration for s in self._base_steps)
+
+    def set_duration_pct(self, pct: int) -> None:
+        """Make the session longer or shorter: the current and later steps take pct% of
+        their written duration, rounded to the nearest second (and their messages move
+        with them). Steps already ridden keep the durations they had, and the time ridden
+        so far in the current step is kept. A change that would end the current step at
+        once ends it after the usual countdown instead."""
+        with self._lock:
+            pct = int(min(DURATION_RANGE[1], max(DURATION_RANGE[0], pct)))
+            if pct == self.duration_pct:
+                return
+            self.duration_pct = pct
+            if not self.finished:
+                for i in range(self.index, len(self.workout.steps)):
+                    self.workout.steps[i] = self._scaled(self._base_steps[i], pct)
+                cur = self.workout.steps[self.index]
+                floor = math.ceil(self.step_elapsed) + self.COUNTDOWN_S
+                if cur.duration < floor:
+                    self.workout.steps[self.index] = replace(cur, duration=float(floor))
+            self._layout()
+            self.layout_version += 1
+            self._force = True
+
+    @staticmethod
+    def _scaled(step: Step, pct: int) -> Step:
+        if pct == 100:
+            return step  # exactly as written (keeps any fractional seconds)
+        d = float(max(1, round(step.duration * pct / 100)))
+        texts = [(min(d, float(round(at * pct / 100))), msg) for at, msg in step.texts]
+        return replace(step, duration=d, texts=texts)
 
     def set_intensity(self, pct: int) -> None:
         with self._lock:
@@ -654,6 +697,8 @@ class WorkoutPlayer:
                 "target_w": self.target_watts(), "paused": self.paused, "started": self.started,
                 "finished": self.finished, "ftp": self.ftp, "base_ftp": self.base_ftp,
                 "intensity": self.intensity_pct, "message": self.message,
+                "duration_pct": self.duration_pct, "base_total": self.base_total_s,
+                "layout": self.layout_version,
                 "message_age": time.time() - self.message_time,
                 "trace_len": len(self.trace),
             }

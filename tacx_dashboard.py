@@ -578,6 +578,7 @@ class WorkoutProfile(pg.PlotWidget):
         self.getAxis("left").setWidth(48)
         self._blocks: list = []
         self._drawn_ftp = -1.0
+        self._drawn_layout = -1
         self.done = pg.LinearRegionItem((0, 0), movable=False, brush=(0, 0, 0, 110), pen=pg.mkPen(None))
         self.done.setZValue(10)
         self.addItem(self.done)
@@ -680,8 +681,9 @@ class WorkoutProfile(pg.PlotWidget):
         self._drawn_ftp = ftp
 
     def update_view(self, snap: dict) -> None:
-        if snap["ftp"] != self._drawn_ftp:
-            self._draw_blocks(snap["ftp"])
+        if snap["ftp"] != self._drawn_ftp or snap["layout"] != self._drawn_layout:
+            self._draw_blocks(snap["ftp"])  # FTP % or session length changed
+            self._drawn_layout = snap["layout"]
         pos = snap["position"] / 60
         self.marker.setValue(pos)
         self.done.setRegion((0, pos))
@@ -691,6 +693,39 @@ class WorkoutProfile(pg.PlotWidget):
             for key, (_l, _c, col) in TRACES.items():
                 self.curves[key].setData(a[:, 0] / 60, a[:, col])
             self._fit_scales()
+
+
+class OverrideControl(QtWidgets.QWidget):
+    """A % override: caption and adjusted value above a spinner, the base value below."""
+
+    def __init__(self, caption: str, value_range: tuple, step: int, on_change):
+        super().__init__()
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(1)
+        self.caption = caption
+        self.top = QtWidgets.QLabel(caption)
+        self.top.setStyleSheet(f"color:{COL_TEXT}; font-size:10pt; font-weight:600;")
+        self.spin = QtWidgets.QSpinBox()
+        self.spin.setRange(*value_range)
+        self.spin.setValue(100)
+        self.spin.setSuffix(" %")
+        self.spin.setSingleStep(step)
+        self.spin.setAccelerated(True)
+        self.spin.setFixedWidth(118)
+        self.spin.setStyleSheet(
+            f"QSpinBox {{ font-size:16pt; font-weight:600; color:{COL_TEXT}; background:#0d1117;"
+            f" border:1px solid #30363d; border-radius:6px; padding:1px 4px; }}"
+            f"QSpinBox::up-button, QSpinBox::down-button {{ width:24px; }}")
+        self.spin.valueChanged.connect(on_change)
+        self.base = QtWidgets.QLabel(" ")
+        self.base.setStyleSheet("color:#8b949e; font-size:9pt;")
+        for w in (self.top, self.spin, self.base):
+            lay.addWidget(w)
+
+    def set_texts(self, adjusted: str, base: str) -> None:
+        self.top.setText(f"{self.caption}  {adjusted}" if adjusted else self.caption)
+        self.base.setText(base or " ")
 
 
 class WorkoutPanel(QtWidgets.QFrame):
@@ -769,21 +804,12 @@ class WorkoutPanel(QtWidgets.QFrame):
         prog.addWidget(self.total)
 
         controls = QtWidgets.QHBoxLayout()
-        ftp_lbl = label(12, bold=True)
-        ftp_lbl.setText("FTP")
-        self.spin = QtWidgets.QSpinBox()
-        self.spin.setRange(*tw.INTENSITY_RANGE)
-        self.spin.setValue(100)
-        self.spin.setSuffix(" %")
-        self.spin.setSingleStep(1)
-        self.spin.setAccelerated(True)
-        self.spin.setFixedWidth(130)
-        self.spin.setStyleSheet(
-            f"QSpinBox {{ font-size:20pt; font-weight:600; color:{COL_TEXT}; background:#0d1117;"
-            f" border:1px solid #30363d; border-radius:6px; padding:2px 6px; }}"
-            f"QSpinBox::up-button, QSpinBox::down-button {{ width:28px; }}")
-        self.spin.valueChanged.connect(player.set_intensity)
-        self.ftp_txt = label(10)
+        controls.setSpacing(14)
+        # session length (left) and FTP overrides: each shows its adjusted value above
+        # the spinner and the workout's own value below
+        self.time = OverrideControl("TIME", tw.DURATION_RANGE, 5, player.set_duration_pct)
+        self.ftp = OverrideControl("FTP", tw.INTENSITY_RANGE, 1, player.set_intensity)
+        self.spin = self.ftp.spin
         self.next_btn = QtWidgets.QPushButton("Next  ▶")
         self.next_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.next_btn.setStyleSheet(
@@ -792,10 +818,10 @@ class WorkoutPanel(QtWidgets.QFrame):
             f"QPushButton:hover {{ background:#5fe0d4; }}"
             f"QPushButton:disabled {{ background:#30363d; color:#8b949e; }}")
         self.next_btn.clicked.connect(player.next_step)
-        controls.addWidget(ftp_lbl)
-        controls.addWidget(self.spin)
-        controls.addWidget(self.ftp_txt, 1)
-        controls.addWidget(self.next_btn)
+        controls.addWidget(self.time)
+        controls.addWidget(self.ftp)
+        controls.addStretch(1)
+        controls.addWidget(self.next_btn, 0, QtCore.Qt.AlignBottom)
         if player.base_ftp is None:  # watts-only workout: nothing to scale
             self.spin.setEnabled(False)
 
@@ -819,9 +845,10 @@ class WorkoutPanel(QtWidgets.QFrame):
         self.profile.update_view(snap)
         s, ftp = snap["step"], snap["ftp"]
         if snap["base_ftp"]:
-            self.ftp_txt.setText(f"  base {snap['base_ftp']:.0f} W\n  adjusted {ftp:.0f} W")
+            self.ftp.set_texts(f"{ftp:.0f} W", f"base {snap['base_ftp']:.0f} W")
         else:
-            self.ftp_txt.setText("  absolute watts\n  (no FTP scaling)")
+            self.ftp.set_texts("", "absolute watts")
+        self.time.set_texts(tw.fmt_time(snap["total"]), f"base {tw.fmt_time(snap['base_total'])}")
         self.progress.setValue(int(1000 * snap["position"] / snap["total"]) if snap["total"] else 0)
         self.total.setText(f"  {tw.fmt_time(snap['position'])} / {tw.fmt_time(snap['total'])}")
 

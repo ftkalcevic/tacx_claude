@@ -42,7 +42,11 @@ dev machine). Run everything with `.venv\Scripts\python`.
 - **GUI → worker:**
   - `loop.call_soon_threadsafe(...)`;
   - or `WorkoutPlayer` methods, which are protected by a lock (`set_intensity`,
-    `next_step`).
+    `set_duration_pct`, `next_step`).
+- **Session length** (`set_duration_pct`): `workout.steps` holds the scaled steps;
+  `_base_steps` keeps the ones as written. Only the current and later steps are
+  rescaled, so chart traces of ridden steps stay aligned. `layout_version` tells the
+  workout chart to redraw.
 - **Launcher → other apps:** it starts the dashboard and editor with
   `subprocess.Popen([sys.executable, "tacx_neo.py", ...])`.
 
